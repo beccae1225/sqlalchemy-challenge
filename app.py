@@ -122,6 +122,8 @@ def start(start):
     return_list.append({'Observation': 'TAVG', 'Temperature': temps[0][1]})        
     return_list.append({'Observation': 'TMAX', 'Temperature': temps[0][2]})
 
+    session.close()
+    
     return jsonify(return_list)        
 
 @app.route("/api/v1.0/<start>/<end>")
@@ -137,6 +139,8 @@ def start_end(start, end):
     temp_return_list.append({'Observation': 'TMIN', 'Temperature': temperatures[0][0]})        
     temp_return_list.append({'Observation': 'TAVG', 'Temperature': temperatures[0][1]})        
     temp_return_list.append({'Observation': 'TMAX', 'Temperature': temperatures[0][2]})
+
+    session.close()
 
     return jsonify(temp_return_list)
 
