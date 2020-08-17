@@ -23,19 +23,6 @@ session = Session(engine)
 """FLASK SETUP"""
 app = Flask(__name__)
 
-def calc_temps(start_date, end_date):
-    """TMIN, TAVG, and TMAX for a list of dates.
-    
-    Args:
-        #start_date (string): A date string in the format %Y-%m-%d
-        #end_date (string): A date string in the format %Y-%m-%d
-        
-    Returns:
-        TMIN, TAVE, and TMAX"""
-    
-    
-    return session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
-        filter(Measurement.date >= start_date).filter(Measurement.date <= end_date).all()
 """FLASK ROUTES"""
 
 @app.route("/")
@@ -49,10 +36,12 @@ def home():
         f"/api/v1.0/tobs <br/>"
         f"/api/v1.0/<start> <br/>"
         f"/api.v1.0/<start>/<end> <br/>"
-    ) 
+    )
 
 @app.route("/api/v1.0/precipitation")
 def prcp():
+
+    session = Session(engine)
 
     final_date = session.query(func.max(func.strftime("%Y-%m-%d", Measurement.date))).all()
     max_date_str = final_date[0][0]
@@ -67,23 +56,27 @@ def prcp():
     for result in prcp_data:
         results[result[0]] = result[1]
 
+    session.close()
 
     return jsonify(results)
-
 
 @app.route("/api/v1.0/stations")
 def stations():
 
+    session = Session(engine)
 
     results = session.query(Station.station).all()
+
+    session.close()
 
     station_names = list(np.ravel(results))
 
     return jsonify(station_names)
 
-
 @app.route("/api/v1.0/tobs")
 def tobs():
+
+    session = Session(engine)
 
     final_date = session.query(func.max(func.strftime("%Y-%m-%d", Measurement.date))).all()
     max_date_str = final_date[0][0]
@@ -91,39 +84,61 @@ def tobs():
 
     previous_date = max_date - dt.timedelta(365)
 
-    tobs_results = session.query(func.max(Measurement.station), func.count(Measurement.station)).\
-        group_by(Measurement.station).\
-        order_by(func.count(Measurement.station).desc()).all().\
-        filter(func.strftime("%Y-%m-%d", Measurement.date) >= begin_date).all()
+    tobs_results = session.query(Measurement).\
+        filter(func.strftime("%Y-%m-%d", Measurement.date) >= previous_date).all().\
+        filter(Measurement.station == 'USC005119281').all()
 
-    obsv_list = []
+    session.close()
+
+    obvs_list = []
     for result in tobs_results:
-        tobs_dict = {}
-        tobs_dict["date"] = tobs_results.date
-        tobs_dict["station"] = tobs_results.station
-        tobs_dict["tobs"] = tobs_results.tobs
-        obvs_list.append(tobs_dict)
+        tobs_dictionary = {}
+        tobs_dictionary["date"] = result.date
+        tobs_dictionary["station"] = result.station
+        tobs_dictionary["tobs"] = result.tobs
+        obvs_list.append(tobs_dictionary)
 
-    return jsonify(obsv_list)
-
+    return jsonify(obvs_list)
 
 @app.route("/api/v1.0/<start>")
-def start():
+def start(start):
+
+    session = Session(engine)
 
     final_date = session.query(func.max(strftime("%Y-%m-%d", Measurement.date))).all()
     max_date = final_date[0][0]
 
-    temperatures = calc_temps(start, max_date)
+    def calc_temps(start_date, end_date):
+    
+        return session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
+            filter(Measurement.date >= start_date).filter(Measurement.date <= end_date).all()
 
-    temp_list = []
-    temp_dict = {'start_date': start, 'end_date': max_date}
-    temp_list.append(temp_dict)
-    temp_list.append({'Observation': 'TMIN', 'Temperature': temperatures[0][0]})
-    temp_list.append({'Observation': 'TAVG', 'Temperature': temperatures[0][1]})
-    temp_list.append({'Observation': 'TMAX', 'Temperature': temperatures[0][2]})
+    temps = calc_temps(start, max_date)
 
-    return jsonify(temp_list)
-#@app.route("/api.v1.0/<start>/<end>")
+    return_list = []
+    date_dict = {'start_date': start, 'end_date': max_date}
+    return_list.append(date_dict)
+    return_list.append({'Observation': 'TMIN', 'Temperature': temps[0][0]})        
+    return_list.append({'Observation': 'TAVG', 'Temperature': temps[0][1]})        
+    return_list.append({'Observation': 'TMAX', 'Temperature': temps[0][2]})
+
+    return jsonify(return_list)        
+
+@app.route("/api/v1.0/<start>/<end>")
+def start_end(start, end):
+
+    session = Session(engine)
+
+    temperatures = calc_temps(start, end)
+
+    temp_return_list = []
+    date_dictionary = {'start_date': start, 'end_date': end}
+    temp_return_list.append(date_dictionary)
+    temp_return_list.append({'Observation': 'TMIN', 'Temperature': temperatures[0][0]})        
+    temp_return_list.append({'Observation': 'TAVG', 'Temperature': temperatures[0][1]})        
+    temp_return_list.append({'Observation': 'TMAX', 'Temperature': temperatures[0][2]})
+
+    return jsonify(temp_return_list)
 
 if __name__ == "__main__":
     app.run(debug=True)
